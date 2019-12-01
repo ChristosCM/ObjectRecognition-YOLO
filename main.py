@@ -123,6 +123,7 @@ for filename_left in left_file_list:
             height = box[3]
             drawPred(imgL, classes[classIDs[detected_object]], confidences[detected_object], left, top, left + width, top + height, (255, 178, 50))
             coords = [ left, top, left + width, top + height]
+            #print (disparity_scaled, max_disparity, coords)
             distances.append(project_disparity_to_3d(disparity_scaled, max_disparity, coords, imgL))
             #print (distances)
         print(full_path_filename_left);

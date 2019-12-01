@@ -22,8 +22,7 @@ def drawPred(image, class_name, confidence, left, top, right, bottom, colour):
     #Display the label at the top of the bounding box
     labelSize, baseLine = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
     top = max(top, labelSize[1])
-    cv2.rectangle(image, (left, top - round(1.5*labelSize[1])),
-        (left + round(1.5*labelSize[0]), top + baseLine), (255, 255, 255), cv2.FILLED)
+    cv2.rectangle(image, (left, top - round(1.5*labelSize[1])),(left + round(1.5*labelSize[0]), top + baseLine), (255, 255, 255), cv2.FILLED)
     cv2.putText(image, label, (left, top), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0,0,0), 1)
 
 # Get the names of the output layers of the CNN network
@@ -64,9 +63,10 @@ def postprocess(image, results, threshold_confidence, threshold_nms):
                 height = int(detection[3] * frameHeight)
                 left = int(center_x - width / 2)
                 top = int(center_y - height / 2)
-                classIds.append(classId)
-                confidences.append(float(confidence))
-                boxes.append([left, top, width, height])
+                if classId==0 or classId==2:
+                    classIds.append(classId)
+                    confidences.append(float(confidence))
+                    boxes.append([left, top, width, height])
 
     # Perform non maximum suppression to eliminate redundant overlapping boxes with
     # lower confidences
@@ -111,11 +111,14 @@ def project_disparity_to_3d(disparity, max_disparity, coords, rgb=[]):
     distances = []
     #MAYBE WE CAN ONLY DEFINE THE POINTS OF THE DETECTED OBJECTS FROM YOLO AND CUT DOWN ON COMPUTATION COST
     points=  []
+    for i in range(len(coords)):
+        if coords[i]>1024:
+            coords[i]=1024
     for y in range(coords[1],coords[3]): # 0 - height is the y axis index
         for x in range(coords[0],coords[2]): # 0 - width is the x axis index
 
                 # if we have a valid non-zero disparity
-
+            
             if (disparity[y,x] > 0):
 
                     # calculate corresponding 3D point [X, Y, Z]
@@ -132,5 +135,7 @@ def project_disparity_to_3d(disparity, max_disparity, coords, rgb=[]):
                     points.append([X,Y,Z,rgb[y,x,2], rgb[y,x,1],rgb[y,x,0]]);
                 else:
                     points.append([X,Y,Z]);    
-                
-    return distance(min(points));
+    if points==[]:
+        return 0
+    else:   
+        return distance(min(points));
