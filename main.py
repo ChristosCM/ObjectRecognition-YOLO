@@ -3,6 +3,8 @@ import os
 import time as tm 
 import numpy as np
 import random 
+import pandas as pd
+#from matplotlib import pyplot as plt 
 #import functions
 from functions import * 
 #from yolo import postprocess
@@ -26,7 +28,7 @@ left_file_list = sorted(os.listdir(full_path_directory_left));
 max_disparity = 128
 stereoProcessor = cv2.StereoSGBM_create(0, max_disparity, 21);
 
-
+count = 0
 #YOLO ATTRIBUTES
 
 windowName = 'YOLOv3 object detection: ' + "yolov3.weights"
@@ -58,6 +60,10 @@ net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT)
 # change to cv2.dnn.DNN_TARGET_CPU (slower) if this causes issues (should fail gracefully if OpenCL not available)
 net.setPreferableTarget(cv2.dnn.DNN_TARGET_OPENCL)
 #END OF YOLO ATTRIBUTES
+time = []
+minDis = []
+avgDis = []
+objects = []
 
 for filename_left in left_file_list:
 
@@ -81,17 +87,22 @@ for filename_left in left_file_list:
         #cv2.imshow('left image',imgL)
 
         imgR = cv2.imread(full_path_filename_right, cv2.IMREAD_COLOR)
+        imgL = cv2.fastNlMeansDenoisingColored(imgL, None, 10, 10, 7, 15) 
+        imgR = cv2.fastNlMeansDenoisingColored(imgR, None, 10, 10, 7, 15) 
         # no need to show the right image
         #cv2.imshow('right image',imgR)
 
         #convert to greyscale for disparity
         grayL = cv2.cvtColor(imgL,cv2.COLOR_BGR2GRAY);
         grayR = cv2.cvtColor(imgR,cv2.COLOR_BGR2GRAY);
-
+        
 
         #preprocessing for better results (CHANGE THAT AND TEST OTHER PREPROCESSING STEPS SUCH AS DENOISING)
+        #convert to grey in oder to calculate disparity between left and right images
         grayL = np.power(grayL, 0.75).astype('uint8');
         grayR = np.power(grayR, 0.75).astype('uint8');
+        #use denoising techniques to improve disparity detection
+       
 
         disparity = stereoProcessor.compute(grayL,grayR);
 
@@ -111,7 +122,7 @@ for filename_left in left_file_list:
         # remove the bounding boxes with low confidence
         confThreshold = cv2.getTrackbarPos(trackbarName,windowName) / 100
         classIDs, confidences, boxes, centers = postprocess(imgL, results, confThreshold, nmsThreshold)
-
+        
 # draw resulting detections on image
         distances = []
         #following is the code for the detected objects
@@ -127,16 +138,24 @@ for filename_left in left_file_list:
             coords = [ left, top, left + width, top + height]
             #for each image calculate the distances from detected objects
             distances.append(project_disparity_to_3d(disparity_scaled, max_disparity, coords,center, imgL))
-            print (classes[classIDs[detected_object]])
             drawPred(imgL, classes[classIDs[detected_object]], confidences[detected_object], left, top, left + width, top + height, (255, 178, 50),distances[-1])
         print(full_path_filename_left);
-        print("{}: nearest detected object on the scene is:{}m".format(full_path_filename_right, min(distances)));
-        print();
+        try:
+            print("{}: nearest detected object on the scene is: {}m \n".format(full_path_filename_right, min(distances)));
+            minDis.append(min(distances))
+
+        except:
+            print("{}: nearest detected object on the scene is: {} \n".format(full_path_filename_right,"inf"));
+            minDis.append(0)
+
         # Put efficiency information. The function getPerfProfile returns the overall time for inference(t) and the timings for each of the layers(in layersTimes)
         t, _ = net.getPerfProfile()
         label = 'Inference time: %.2f ms' % (t * 1000.0 / cv2.getTickFrequency())
         cv2.putText(imgL, label, (0, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255))
-
+        time.append(t * 1000.0 / cv2.getTickFrequency())
+        #minDis.append(min(distances))
+        avgDis.append(sum(filter(lambda x: isinstance(x,float),distances)))
+        objects.append(len(boxes))
         # display image
         cv2.imshow(windowName,imgL)
         cv2.setWindowProperty(windowName, cv2.WND_PROP_FULLSCREEN,
@@ -145,7 +164,6 @@ for filename_left in left_file_list:
         t, _ = net.getPerfProfile()
         label = 'Inference time: %.2f ms' % (t * 1000.0 / cv2.getTickFrequency())
         cv2.putText(imgL, label, (0, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255))
-
         # display image
         cv2.imshow(windowName,imgL)
         cv2.imshow("Disparity",disparity_scaled)
@@ -155,7 +173,15 @@ for filename_left in left_file_list:
         #function for wait save and exit keys, important for images to show
 
         key = cv2.waitKey(40 * (not(pause_playback))) & 0xFF; # wait 40ms (i.e. 1000ms / 25 fps = 40 ms)
-        if (key == ord('x')):       # exit
+        if (key == ord('x')) or count==30:
+            data = {
+                "time":time,
+                "minDis":minDis,
+                "avgDis":avgDis,
+                "objects":objects
+            }
+            df = pd.DataFrame(data)
+            df.to_csv("150Smooth1.csv")
             break; # exit
         elif (key == ord('s')):     # save
             #cv2.imwrite("sgbm-disparty.png", disparity_scaled);
@@ -168,3 +194,4 @@ for filename_left in left_file_list:
     else:
             print("-- files skipped (perhaps one is missing or not PNG)");
             print();
+    count +=1
