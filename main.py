@@ -38,8 +38,8 @@ cv2.createTrackbar(trackbarName, windowName , 0, 100, on_trackbar)
 
 confThreshold = 0.5  # Confidence threshold
 nmsThreshold = 0.4   # Non-maximum suppression threshold
-inpWidth = 416       # Width of network's input image
-inpHeight = 416      # Height of network's input image
+inpWidth = 150      # Width of network's input image used to be 416 EXPERIMENTING WITH LOWER VALUES FOR FASTER DETECTION
+inpHeight = 150      # Height of network's input image used to be 416
 
 # Load names of classes from file
 
@@ -108,24 +108,27 @@ for filename_left in left_file_list:
         # runs forward inference to get output of the final output layers
         results = net.forward(output_layer_names)
 
-
         # remove the bounding boxes with low confidence
         confThreshold = cv2.getTrackbarPos(trackbarName,windowName) / 100
-        classIDs, confidences, boxes = postprocess(imgL, results, confThreshold, nmsThreshold)
+        classIDs, confidences, boxes, centers = postprocess(imgL, results, confThreshold, nmsThreshold)
 
 # draw resulting detections on image
         distances = []
+        #following is the code for the detected objects
         for detected_object in range(0, len(boxes)):
             box = boxes[detected_object]
+            center = centers[detected_object]
             left = box[0]
             top = box[1]
             width = box[2]
             height = box[3]
-            drawPred(imgL, classes[classIDs[detected_object]], confidences[detected_object], left, top, left + width, top + height, (255, 178, 50))
+
+            #calculate the coordinates
             coords = [ left, top, left + width, top + height]
-            #print (disparity_scaled, max_disparity, coords)
-            distances.append(project_disparity_to_3d(disparity_scaled, max_disparity, coords, imgL))
-            #print (distances)
+            #for each image calculate the distances from detected objects
+            distances.append(project_disparity_to_3d(disparity_scaled, max_disparity, coords,center, imgL))
+            print (classes[classIDs[detected_object]])
+            drawPred(imgL, classes[classIDs[detected_object]], confidences[detected_object], left, top, left + width, top + height, (255, 178, 50),distances[-1])
         print(full_path_filename_left);
         print("{}: nearest detected object on the scene is:{}m".format(full_path_filename_right, min(distances)));
         print();
@@ -145,6 +148,7 @@ for filename_left in left_file_list:
 
         # display image
         cv2.imshow(windowName,imgL)
+        cv2.imshow("Disparity",disparity_scaled)
         cv2.setWindowProperty(windowName, cv2.WND_PROP_FULLSCREEN,
                                 cv2.WINDOW_FULLSCREEN )
 

@@ -12,13 +12,15 @@ def on_trackbar(val):
 # left, top, right, bottom: rectangle parameters for detection
 # colour: to draw detection rectangle in
 
-def drawPred(image, class_name, confidence, left, top, right, bottom, colour):
+def drawPred(image, class_name, confidence, left, top, right, bottom, colour,dis):
+    if class_name=="person":
+        colour = (0,0,255)
     # Draw a bounding box.
     cv2.rectangle(image, (left, top), (right, bottom), colour, 3)
 
     # construct label
     label = '%s:%.2f' % (class_name, confidence)
-
+    label += " {0:.2f}m".format(dis)
     #Display the label at the top of the bounding box
     labelSize, baseLine = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
     top = max(top, labelSize[1])
@@ -51,6 +53,7 @@ def postprocess(image, results, threshold_confidence, threshold_nms):
     classIds = []
     confidences = []
     boxes = []
+    centers = []
     for result in results:
         for detection in result:
             scores = detection[5:]
@@ -67,22 +70,22 @@ def postprocess(image, results, threshold_confidence, threshold_nms):
                     classIds.append(classId)
                     confidences.append(float(confidence))
                     boxes.append([left, top, width, height])
-
+                    centers.append((center_x,center_y))
     # Perform non maximum suppression to eliminate redundant overlapping boxes with
     # lower confidences
     classIds_nms = []
     confidences_nms = []
     boxes_nms = []
-
+    centers_nms = []
     indices = cv2.dnn.NMSBoxes(boxes, confidences, threshold_confidence, threshold_nms)
     for i in indices:
         i = i[0]
         classIds_nms.append(classIds[i])
         confidences_nms.append(confidences[i])
         boxes_nms.append(boxes[i])
-
+        centers_nms.append(centers[i])
     # return post processed lists of classIds, confidences and bounding boxes
-    return (classIds_nms, confidences_nms, boxes_nms)
+    return (classIds_nms, confidences_nms, boxes_nms,centers_nms)
 
 
 camera_focal_length_px = 399.9745178222656  # focal length in pixels
@@ -96,7 +99,7 @@ image_centre_w = 474.5;
 def distance(coords):
     return math.sqrt(coords[0]**2+coords[1]**2+coords[2]**2)
 
-def project_disparity_to_3d(disparity, max_disparity, coords, rgb=[]):
+def project_disparity_to_3d(disparity, max_disparity, coords,center, rgb=[]):
 
     f = camera_focal_length_px;
     B = stereo_camera_baseline_m;
@@ -111,30 +114,44 @@ def project_disparity_to_3d(disparity, max_disparity, coords, rgb=[]):
     distances = []
     #MAYBE WE CAN ONLY DEFINE THE POINTS OF THE DETECTED OBJECTS FROM YOLO AND CUT DOWN ON COMPUTATION COST
     points=  []
-    for i in range(len(coords)):
-        if coords[i]>1024:
-            coords[i]=1024
-    for y in range(coords[1],coords[3]): # 0 - height is the y axis index
-        for x in range(coords[0],coords[2]): # 0 - width is the x axis index
 
-                # if we have a valid non-zero disparity
+    # for i in range(len(coords)):
+    #     if coords[i]>1024:
+    #         coords[i]=1024
+    # for y in range(coords[1],coords[3]): # 0 - height is the y axis index
+    #     for x in range(coords[0],coords[2]): # 0 - width is the x axis index
+
+    #             # if we have a valid non-zero disparity
             
-            if (disparity[y,x] > 0):
+    #         if (disparity[y,x] > 0):
 
-                    # calculate corresponding 3D point [X, Y, Z]
+    #                 # calculate corresponding 3D point [X, Y, Z]
 
-                    # stereo lecture - slide 22 + 25
-                Z = (f * B) / disparity[y,x];
+    #                 # stereo lecture - slide 22 + 25
+    #             Z = (f * B) / disparity[y,x];
 
-                X = ((x - image_centre_w) * Z) / f;
-                Y = ((y - image_centre_h) * Z) / f;
+    #             X = ((x - image_centre_w) * Z) / f;
+    #             Y = ((y - image_centre_h) * Z) / f;
+
+    #                 # add to points
+
+    #             if(rgb.size > 0):
+    #                 points.append([X,Y,Z,rgb[y,x,2], rgb[y,x,1],rgb[y,x,0]]);
+    #             else:
+    #                 points.append([X,Y,Z]);    
+    
+    
+    Z = (f * B) / disparity[center[1],center[0]];
+
+    X = ((center[0] - image_centre_w) * Z) / f;
+    Y = ((center[1] - image_centre_h) * Z) / f;
 
                     # add to points
 
-                if(rgb.size > 0):
-                    points.append([X,Y,Z,rgb[y,x,2], rgb[y,x,1],rgb[y,x,0]]);
-                else:
-                    points.append([X,Y,Z]);    
+    if(rgb.size > 0):
+        points.append([X,Y,Z,rgb[center[1],center[0],2], rgb[center[1],center[0],1],rgb[center[1],center[0],0]]);
+    else:
+        points.append([X,Y,Z]);    
     if points==[]:
         return 0
     else:   
