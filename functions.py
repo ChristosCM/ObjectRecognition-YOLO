@@ -2,8 +2,8 @@ import numpy as np
 import cv2
 import math
 # dummy on trackbar callback function
-def on_trackbar(val):
-    return
+# def on_trackbar(val):
+#     return
 
 
 # Draw the predicted bounding box on the specified image
@@ -67,7 +67,8 @@ def postprocess(image, results, threshold_confidence, threshold_nms):
                 height = int(detection[3] * frameHeight)
                 left = int(center_x - width / 2)
                 top = int(center_y - height / 2)
-                if (classId==0 or classId==2) and not (left<own_car[0]<left+width and top<own_car[1]<top+height):
+                #limit to cars and people classes and check if its detecting the camera's car. If it is then don't add it to the lists.
+                if (classId==0 or classId==2) and not (left<own_car[0]<left+width and 400<own_car[1]<544):
                     classIds.append(classId)
                     confidences.append(float(confidence))
                     boxes.append([left, top, width, height])
@@ -93,8 +94,8 @@ camera_focal_length_px = 399.9745178222656  # focal length in pixels
 camera_focal_length_m = 4.8 / 1000          # focal length in metres (4.8 mm)
 stereo_camera_baseline_m = 0.2090607502     # camera baseline in metres
 
-image_centre_h = 262.0;
-image_centre_w = 474.5;
+image_centre_h = 208#262.0;
+image_centre_w = 208#474.5;
 
 #following functinons are for calculating the distance
 def distance(coords):
@@ -116,16 +117,14 @@ def project_disparity_to_3d(disparity, max_disparity, coords,center, rgb=[]):
     #MAYBE WE CAN ONLY DEFINE THE POINTS OF THE DETECTED OBJECTS FROM YOLO AND CUT DOWN ON COMPUTATION COST
     points=  []
 
-    # for i in range(len(coords)):
-    #     if coords[i]>1024:
-    #         coords[i]=1024
-    # for y in range(coords[1],coords[3]): # 0 - height is the y axis index
-    #     for x in range(coords[0],coords[2]): # 0 - width is the x axis index
+    got = False
+    # for y in range(coords[1],min(544,coords[3])): # 0 - height is the y axis index
+    #     for x in range(coords[0],min(1024,coords[2])): # 0 - width is the x axis index
 
     #             # if we have a valid non-zero disparity
             
     #         if (disparity[y,x] > 0):
-
+    #             got = True
     #                 # calculate corresponding 3D point [X, Y, Z]
 
     #                 # stereo lecture - slide 22 + 25
@@ -141,7 +140,7 @@ def project_disparity_to_3d(disparity, max_disparity, coords,center, rgb=[]):
     #             else:
     #                 points.append([X,Y,Z]);    
     
-    
+    #Only for getting the center
     Z = (f * B) / disparity[center[1],center[0]];
 
     X = ((center[0] - image_centre_w) * Z) / f;
@@ -149,7 +148,9 @@ def project_disparity_to_3d(disparity, max_disparity, coords,center, rgb=[]):
 
                     # add to points
 
-    if(rgb.size > 0):
+    if(rgb.size > 0)and got==True:
+        #points.append([X,Y,Z,rgb[y,x,2], rgb[y,x,1],rgb[y,x,0]]);
+        #only for calculating with the center as a single point of reference 
         points.append([X,Y,Z,rgb[center[1],center[0],2], rgb[center[1],center[0],1],rgb[center[1],center[0],0]]);
     else:
         points.append([X,Y,Z]);    
