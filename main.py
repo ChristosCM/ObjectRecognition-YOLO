@@ -4,6 +4,7 @@ import time as tm
 import numpy as np
 import random 
 import pandas as pd
+from scipy import misc
 #from matplotlib import pyplot as plt 
 #import functions
 from functions import * 
@@ -26,7 +27,7 @@ full_path_directory_right =  os.path.join(master_path_to_dataset, directory_to_c
 left_file_list = sorted(os.listdir(full_path_directory_left));
 
 max_disparity = 128
-stereoProcessor = cv2.StereoSGBM_create(0, max_disparity, 21);
+stereoProcessor = cv2.StereoSGBM_create(0, max_disparity, 11,P1=24,P2=128);
 
 count = 0
 #YOLO ATTRIBUTES
@@ -35,6 +36,15 @@ windowName = 'YOLOv3 object detection: ' + "yolov3.weights"
 cv2.namedWindow(windowName, cv2.WINDOW_NORMAL)
 trackbarName = 'reporting confidence > (x 0.01)'
 cv2.createTrackbar(trackbarName, windowName , 0, 100, on_trackbar)
+
+#disparity variables
+camera_focal_length_px = 399.9745178222656  # focal length in pixels
+camera_focal_length_m = 4.8 / 1000          # focal length in metres (4.8 mm)
+stereo_camera_baseline_m = 0.2090607502     # camera baseline in metres
+disparities = 128   # num of disparities to consider
+block = 31          # block size to match
+units = 0.001       # depth units
+sbm = cv2.StereoBM_create(numDisparities=disparities,blockSize=block)
 
 # init YOLO CNN object detection model
 
@@ -87,11 +97,18 @@ for filename_left in left_file_list:
         #cv2.imshow('left image',imgL)
 
         imgR = cv2.imread(full_path_filename_right, cv2.IMREAD_COLOR)
-        imgL = cv2.fastNlMeansDenoisingColored(imgL, None, 10, 10, 7, 15) 
-        imgR = cv2.fastNlMeansDenoisingColored(imgR, None, 10, 10, 7, 15) 
+
+
+        #imgL = cv2.fastNlMeansDenoisingColored(imgL, None, 10, 10, 7, 15) 
+        #imgR = cv2.fastNlMeansDenoisingColored(imgR, None, 10, 10, 7, 15) 
+
+        #crop the 2 images to exclude the own car (from 544 reducde to 400). This has no impact on the placement of polygons 
+        # cropL = imgL[0:400,:]
+        # cropR = imgR[0:400,:]
         # no need to show the right image
         #cv2.imshow('right image',imgR)
 
+        
         #convert to greyscale for disparity
         grayL = cv2.cvtColor(imgL,cv2.COLOR_BGR2GRAY);
         grayR = cv2.cvtColor(imgR,cv2.COLOR_BGR2GRAY);
@@ -103,12 +120,17 @@ for filename_left in left_file_list:
         grayR = np.power(grayR, 0.75).astype('uint8');
         #use denoising techniques to improve disparity detection
        
-
+        #look into github repo
+        # disparity = sbm.compute(grayL,grayR)
+        # depth = np.zeros(shape=grayL.shape).astype(float)
+        # depth[disparity > 0] = (camera_focal_length_px * stereo_camera_baseline_m) / (units * disparity[disparity > 0])
+        # print (depth)
+        #original way to calculate disparity
         disparity = stereoProcessor.compute(grayL,grayR);
 
         #filter out noise and speckles
-        dispNoiseFilter = 5; # increase for more agressive filtering
-        cv2.filterSpeckles(disparity, 0, 4000, max_disparity - dispNoiseFilter);
+        dispNoiseFilter = 50; # increase for more agressive filtering
+        cv2.filterSpeckles(disparity, 0, 10000, max_disparity - dispNoiseFilter);
         tensor = cv2.dnn.blobFromImage(imgL, 1/255, (imgL.shape[1], imgL.shape[0]), [0,0,0], 1, crop=False)
 
         _, disparity = cv2.threshold(disparity,0, max_disparity * 16, cv2.THRESH_TOZERO);
