@@ -27,8 +27,8 @@ full_path_directory_right =  os.path.join(master_path_to_dataset, directory_to_c
 left_file_list = sorted(os.listdir(full_path_directory_left));
 
 #SGBM PROCESSOR
-max_disparity = 160
-#stereoProcessor = cv2.StereoSGBM_create(0, max_disparity, 11,P1=64,P2=256);
+max_disparity = 128
+stereoProcessor = cv2.StereoSGBM_create(0, max_disparity, 21);
 lineThickness = 2 #how the large the thickness defining the crop is
 
 # SGBM Parameters -----------------
@@ -79,8 +79,8 @@ units = 0.001       # depth units
 
 confThreshold = 0.5  # Confidence threshold
 nmsThreshold = 0.4   # Non-maximum suppression threshold
-inpWidth = 169     # Width of network's input image used to be 416 EXPERIMENTING WITH LOWER VALUES FOR FASTER DETECTION
-inpHeight = 169      # Height of network's input image used to be 416
+inpWidth = 416     # Width of network's input image used to be 416 EXPERIMENTING WITH LOWER VALUES FOR FASTER DETECTION
+inpHeight = 416      # Height of network's input image used to be 416
 
 # Load names of classes from file
 
@@ -125,10 +125,7 @@ for filename_left in left_file_list:
         
 
 
-        # nphorizontal = np.hstack((imgL,cropL))
-        # cv2.namedWindow("Horizontal", cv2.WINDOW_NORMAL)
-        # cv2.setWindowProperty("Horizontal", cv2.WND_PROP_FULLSCREEN,
-        #                         cv2.WINDOW_FULLSCREEN )
+       
         
 
 
@@ -136,14 +133,13 @@ for filename_left in left_file_list:
         #imgR = cv2.fastNlMeansDenoisingColored(imgR, None, 10, 10, 7, 15) 
 
         #crop the 2 images to exclude the own car (from 544 reducde to 400). This has no impact on the placement of polygons 
-        cropL = imgL[:416,304:720]
-        cropR = imgR[:416,304:720]
+        cropL = imgL#[:416,304:720]
+        cropR = imgR#[:416,304:720]
         
-        cropL = cv2.bilateralFilter(cropL,d=0,sigmaColor=30,sigmaSpace=20)
-        cropR = cv2.bilateralFilter(cropR,d=0,sigmaColor=30,sigmaSpace=20)
+        # cropL = cv2.bilateralFilter(cropL,d=0,sigmaColor=30,sigmaSpace=20)
+        # cropR = cv2.bilateralFilter(cropR,d=0,sigmaColor=30,sigmaSpace=20)
 
         # no need to show the right image
-        #cv2.imshow('right image',imgR)
         
         
         #convert to greyscale for disparity, no need for right image as its already in grayscale
@@ -156,36 +152,32 @@ for filename_left in left_file_list:
         grayL = np.power(grayL, 0.75).astype('uint8');
         grayR = np.power(grayR, 0.75).astype('uint8');
         #use denoising techniques to improve disparity detection
-        # cv2.imshow("test",cropR)
-        # cv2.waitKey(0)
-        # break
-       
+        
 
 
             #we calculate both the disparities in order to apply WLS filtering. Computed based on creation of left and right matcher at the start
-        displ = left_matcher.compute(grayL, grayR).astype(np.float32)
-        dispr = right_matcher.compute(grayR, grayL).astype(np.float32)
+        # displ = left_matcher.compute(grayL, grayR).astype(np.float32)
+        # dispr = right_matcher.compute(grayR, grayL).astype(np.float32)
             #convert to int16, don't really need to, check for improvement in computation
             # displ = np.int16(displ)
             # dispr = np.int16(dispr)
             #filter the image by passing the disparities and the original image
-        filteredImg = wls_filter.filter(displ, imgL, None, dispr)  # important to put "imgL" here!!!
+        # filteredImg = wls_filter.filter(displ, imgL, None, dispr)  # important to put "imgL" here!!!
             #normalize the result of the filtering
-        cv2.normalize(src=filteredImg, dst=filteredImg, beta=0, alpha=255, norm_type=cv2.NORM_MINMAX);
+        # cv2.normalize(src=filteredImg, dst=filteredImg, beta=0, alpha=255, norm_type=cv2.NORM_MINMAX);
             #convert to unit8 and assign it to disparity scaled to use in the functions below
-        disparity_scaled = np.uint8(filteredImg)
-        disparity_scaled = disparity_scaled[:416,304:720]
+        # dis = np.uint8(filteredImg)
+        # disparity_scaled = dis[:416,304:720]
        
-        #disparity = left_matcher.compute(grayL,grayR);
         
         
         #Old code to filter out noise and speckles and to convert disparity
-        # dispNoiseFilter = 5; # increase for more agressive filtering
-        # cv2.filterSpeckles(disparity, 0, 4000, max_disparity - dispNoiseFilter);
+        disparity = stereoProcessor.compute(grayL,grayR)
+        dispNoiseFilter = 5; # increase for more agressive filtering
+        cv2.filterSpeckles(disparity, 0, 4000, max_disparity - dispNoiseFilter);
 
-        # _, disparity = cv2.threshold(disparity,0, max_disparity * 16, cv2.THRESH_TOZERO);
-        # disparity_scaled = (disparity / 16.).astype(np.uint8);
-        #cropL = imgL[:416,304:720]
+        _, disparity = cv2.threshold(disparity,0, max_disparity * 16, cv2.THRESH_TOZERO);
+        disparity_scaled = (disparity / 16.).astype(np.uint8);
         tensor = cv2.dnn.blobFromImage(cropL, 1/255, (cropL.shape[1], cropL.shape[0]), [0,0,0], 1, crop=False)
 
         
@@ -206,7 +198,7 @@ for filename_left in left_file_list:
         for detected_object in range(0, len(boxes)):
             box = boxes[detected_object]
             center = centers[detected_object]
-            left = box[0]+304 #add the 304 because of the cropped section being detected 
+            left = box[0]#+304 #add the 304 because of the cropped section being detected 
             top = box[1]
             width = box[2]
             height = box[3]
@@ -218,15 +210,22 @@ for filename_left in left_file_list:
             drawPred(imgL, classes[classIDs[detected_object]], confidences[detected_object], left, top, left + width, top + height, (255, 178, 50),distances[-1])
         print(full_path_filename_left);
         try:
-            print("{}: nearest detected object on the scene is: {}m \n".format(full_path_filename_right, min(distances)));
+            print("{0}: nearest detected object on the scene is: {1:.2f}m \n".format(full_path_filename_right, min(distances)));
             minDis.append(min(distances))
 
         except:
-            print("{}: nearest detected object on the scene is: {} \n".format(full_path_filename_right,"inf"));
+            print("{}: nearest detected object on the scene is: {} \n".format(full_path_filename_right,np.nan));
             minDis.append(0)
 
+        dis = cv2.cvtColor(disparity_scaled,cv2.COLOR_GRAY2BGR);
+
         #draw lines on image to show cropped section used for detection
-        cv2.rectangle(imgL, (304,0),(720, 543), (0, 255, 0),lineThickness)
+        #cv2.rectangle(imgL, (304,0),(720, 543), (0, 200, 0),lineThickness) #draw it on image
+        #cv2.rectangle(dis, (304,0),(720, 543), (0, 200, 0),lineThickness) #draw it on the disparity image
+
+
+       
+        
         # Put efficiency information. The function getPerfProfile returns the overall time for inference(t) and the timings for each of the layers(in layersTimes)
         t, _ = net.getPerfProfile()
         label = 'Inference time: %.2f ms' % (t * 1000.0 / cv2.getTickFrequency())
@@ -236,23 +235,20 @@ for filename_left in left_file_list:
         avgDis.append(sum(filter(lambda x: isinstance(x,float),distances)))
         objects.append(len(boxes))
         # display image
-        cv2.imshow(windowName,imgL)
+        
+        combined = np.hstack((imgL,dis))
+        cv2.imshow(windowName,combined)
+        cv2.namedWindow(windowName, cv2.WINDOW_NORMAL)
+
         cv2.setWindowProperty(windowName, cv2.WND_PROP_FULLSCREEN,
                                 cv2.WINDOW_FULLSCREEN )
-        # Put efficiency information. The function getPerfProfile returns the overall time for inference(t) and the timings for each of the layers(in layersTimes)
-        t, _ = net.getPerfProfile()
-        label = 'Inference time: %.2f ms' % (t * 1000.0 / cv2.getTickFrequency())
-        cv2.putText(imgL, label, (0, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255))
-        # display image
-        cv2.imshow(windowName,imgL)
-        cv2.imshow("Disparity",disparity_scaled)
-        cv2.setWindowProperty(windowName, cv2.WND_PROP_FULLSCREEN,
-                                cv2.WINDOW_FULLSCREEN )
+        #cv2.imshow("Disparity",disparity_scaled)
+        
 
         #function for wait save and exit keys, important for images to show
 
         key = cv2.waitKey(40 * (not(pause_playback))) & 0xFF; # wait 40ms (i.e. 1000ms / 25 fps = 40 ms)
-        if (key == ord('x')) or count==30:
+        if (key == ord('x')) or count==100:
             data = {
                 "time":time,
                 "minDis":minDis,
@@ -265,9 +261,6 @@ for filename_left in left_file_list:
         elif (key == ord('s')):     # save
             #cv2.imwrite("sgbm-disparty.png", disparity_scaled);
             cv2.imwrite("left.png", imgL);
-            #cv2.imwrite("right.png", imgR);
-        elif (key == ord('c')):     # crop
-            crop_disparity = not(crop_disparity);
         elif (key == ord(' ')):     # pause (on next frame)
             pause_playback = not(pause_playback);
     else:

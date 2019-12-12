@@ -53,8 +53,9 @@ def postprocess(image, results, threshold_confidence, threshold_nms):
     classIds = []
     confidences = []
     boxes = []
+    #
     centers = []
-    own_car = (frameWidth//2,frameHeight*(4/5))
+    own_car = (frameWidth//2,410)
     for result in results:
         for detection in result:
             scores = detection[5:]
