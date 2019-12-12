@@ -13,9 +13,10 @@ import math
 # colour: to draw detection rectangle in
 
 def drawPred(image, class_name, confidence, left, top, right, bottom, colour,dis):
+    #give people a red bounding box
     if class_name=="person":
         colour = (0,0,255)
-    # Draw a bounding box.
+    # Draw the bounding box.
     cv2.rectangle(image, (left, top), (right, bottom), colour, 3)
 
     # construct label
@@ -73,6 +74,7 @@ def postprocess(image, results, threshold_confidence, threshold_nms):
                     classIds.append(classId)
                     confidences.append(float(confidence))
                     boxes.append([left, top, width, height])
+                    #add the center pixel to image
                     centers.append((center_x,center_y))
     # Perform non maximum suppression to eliminate redundant overlapping boxes with
     # lower confidences

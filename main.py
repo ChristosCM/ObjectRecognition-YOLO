@@ -20,7 +20,8 @@ skip_forward_file_pattern = ""; # set to timestamp to skip forward to
 
 #crop_disparity = False; # display full or cropL disparity image
 pause_playback = False; # pause until key press after each image
-
+#define the confidence threshold to be above 50% so that we avoid false positives in data
+confThreshold=50/100
 full_path_directory_left =  os.path.join(master_path_to_dataset, directory_to_cycle_left);
 full_path_directory_right =  os.path.join(master_path_to_dataset, directory_to_cycle_right);
 
@@ -28,7 +29,9 @@ left_file_list = sorted(os.listdir(full_path_directory_left));
 
 #SGBM PROCESSOR
 max_disparity = 128
-stereoProcessor = cv2.StereoSGBM_create(0, max_disparity, 21);
+#stereoProcessor = cv2.StereoSGBM_create(0, max_disparity, 21);
+#stereoProcessor = cv2.StereoBM_create(0,21);
+
 lineThickness = 2 #how the large the thickness defining the crop is
 
 # SGBM Parameters -----------------
@@ -57,6 +60,11 @@ wls_filter = cv2.ximgproc.createDisparityWLSFilter(matcher_left=left_matcher)
 wls_filter.setLambda(lmbda)
 wls_filter.setSigmaColor(sigma)
 
+
+#kernel for sharpening image
+kernel = np.array([[ 0,-1, 0], 
+                           [-1, 5,-1],
+                           [ 0,-1, 0]])
 count = 0
 #YOLO ATTRIBUTES
 
@@ -69,21 +77,14 @@ cv2.namedWindow(windowName, cv2.WINDOW_NORMAL)
 camera_focal_length_px = 399.9745178222656  # focal length in pixels
 camera_focal_length_m = 4.8 / 1000          # focal length in metres (4.8 mm)
 stereo_camera_baseline_m = 0.2090607502     # camera baseline in metres
-disparities = 128   # num of disparities to consider
-block = 31          # block size to match
-units = 0.001       # depth units
-
-#sbm = cv2.StereoBM_create(numDisparities=disparities,blockSize=block)
 
 # init YOLO CNN object detection model
-
 confThreshold = 0.5  # Confidence threshold
 nmsThreshold = 0.4   # Non-maximum suppression threshold
 inpWidth = 416     # Width of network's input image used to be 416 EXPERIMENTING WITH LOWER VALUES FOR FASTER DETECTION
 inpHeight = 416      # Height of network's input image used to be 416
 
 # Load names of classes from file
-
 classesFile = "coco.names"
 classes = None
 with open(classesFile, 'rt') as f:
@@ -122,25 +123,15 @@ for filename_left in left_file_list:
         imgL = cv2.imread(full_path_filename_left, cv2.IMREAD_COLOR) #read left image
         imgR = cv2.imread(full_path_filename_right, cv2.COLOR_BGR2GRAY) #read right image in grayscale 
 
-        
-
-
-       
-        
-
-
-        #imgL = cv2.fastNlMeansDenoisingColored(imgL, None, 10, 10, 7, 15) 
-        #imgR = cv2.fastNlMeansDenoisingColored(imgR, None, 10, 10, 7, 15) 
 
         #crop the 2 images to exclude the own car (from 544 reducde to 400). This has no impact on the placement of polygons 
-        cropL = imgL#[:416,304:720]
-        cropR = imgR#[:416,304:720]
+        cropL = imgL[:416,304:720]
+        cropR = imgR[:416,304:720]
         
-        # cropL = cv2.bilateralFilter(cropL,d=0,sigmaColor=30,sigmaSpace=20)
-        # cropR = cv2.bilateralFilter(cropR,d=0,sigmaColor=30,sigmaSpace=20)
-
-        # no need to show the right image
-        
+        # blur = cv2.GaussianBlur(imgL, (0, 0), 3)
+        # newsharp = cv2.addWeighted(imgL,1.5,blur,-0.5,0)
+        cropL = cv2.filter2D(cropL, -1, kernel)
+        cropR = cv2.filter2D(cropR, -1, kernel)        
         
         #convert to greyscale for disparity, no need for right image as its already in grayscale
         grayL = cv2.cvtColor(imgL,cv2.COLOR_BGR2GRAY);
@@ -149,35 +140,37 @@ for filename_left in left_file_list:
 
         #preprocessing for better results (CHANGE THAT AND TEST OTHER PREPROCESSING STEPS SUCH AS DENOISING)
         #convert to grey in oder to calculate disparity between left and right images
-        grayL = np.power(grayL, 0.75).astype('uint8');
-        grayR = np.power(grayR, 0.75).astype('uint8');
-        #use denoising techniques to improve disparity detection
-        
-
+        # grayL = np.power(grayL, 0.75).astype('uint8');
+        # grayR = np.power(grayR, 0.75).astype('uint8');
+        # grayL = cv2.bilateralFilter(cropL,d=0,sigmaColor=30,sigmaSpace=20)
+        # grayR = cv2.bilateralFilter(cropR,d=0,sigmaColor=30,sigmaSpace=20)
 
             #we calculate both the disparities in order to apply WLS filtering. Computed based on creation of left and right matcher at the start
-        # displ = left_matcher.compute(grayL, grayR).astype(np.float32)
-        # dispr = right_matcher.compute(grayR, grayL).astype(np.float32)
+        displ = left_matcher.compute(grayL, grayR).astype(np.float32)
+        dispr = right_matcher.compute(grayR, grayL).astype(np.float32)
             #convert to int16, don't really need to, check for improvement in computation
             # displ = np.int16(displ)
             # dispr = np.int16(dispr)
             #filter the image by passing the disparities and the original image
-        # filteredImg = wls_filter.filter(displ, imgL, None, dispr)  # important to put "imgL" here!!!
+        filteredImg = wls_filter.filter(displ, imgL, None, dispr)  # important to put "imgL" here!!!
             #normalize the result of the filtering
-        # cv2.normalize(src=filteredImg, dst=filteredImg, beta=0, alpha=255, norm_type=cv2.NORM_MINMAX);
+        cv2.normalize(src=filteredImg, dst=filteredImg, beta=0, alpha=255, norm_type=cv2.NORM_MINMAX);
             #convert to unit8 and assign it to disparity scaled to use in the functions below
-        # dis = np.uint8(filteredImg)
-        # disparity_scaled = dis[:416,304:720]
-       
+        dis = np.uint8(filteredImg)
+        disparity_scaled = np.uint8(filteredImg)
+        disparity_scaled = dis[:416,304:720]
+        print (dis.shape)
+
         
         
         #Old code to filter out noise and speckles and to convert disparity
-        disparity = stereoProcessor.compute(grayL,grayR)
-        dispNoiseFilter = 5; # increase for more agressive filtering
-        cv2.filterSpeckles(disparity, 0, 4000, max_disparity - dispNoiseFilter);
+        # disparity = stereoProcessor.compute(grayL,grayR)
+        # dispNoiseFilter = 5; # increase for more agressive filtering
+        # cv2.filterSpeckles(disparity, 0, 4000, max_disparity - dispNoiseFilter);
+        # _, disparity = cv2.threshold(disparity,0, max_disparity * 16, cv2.THRESH_TOZERO);
+        # disparity_scaled = (disparity / 16.).astype(np.uint8);
 
-        _, disparity = cv2.threshold(disparity,0, max_disparity * 16, cv2.THRESH_TOZERO);
-        disparity_scaled = (disparity / 16.).astype(np.uint8);
+
         tensor = cv2.dnn.blobFromImage(cropL, 1/255, (cropL.shape[1], cropL.shape[0]), [0,0,0], 1, crop=False)
 
         
@@ -187,9 +180,7 @@ for filename_left in left_file_list:
         # runs forward inference to get output of the final output layers
         results = net.forward(output_layer_names)
 
-        # remove the bounding boxes with low confidence
-        #confThreshold = cv2.getTrackbarPos(trackbarName,windowName) / 100
-        confThreshold=50/100
+        
         classIDs, confidences, boxes, centers = postprocess(cropL, results, confThreshold, nmsThreshold)
         
 # draw resulting detections on image
@@ -198,7 +189,7 @@ for filename_left in left_file_list:
         for detected_object in range(0, len(boxes)):
             box = boxes[detected_object]
             center = centers[detected_object]
-            left = box[0]#+304 #add the 304 because of the cropped section being detected 
+            left = box[0]+304 #add the 304 because of the cropped section being detected 
             top = box[1]
             width = box[2]
             height = box[3]
@@ -217,11 +208,11 @@ for filename_left in left_file_list:
             print("{}: nearest detected object on the scene is: {} \n".format(full_path_filename_right,np.nan));
             minDis.append(0)
 
-        dis = cv2.cvtColor(disparity_scaled,cv2.COLOR_GRAY2BGR);
+        dis = cv2.cvtColor(dis,cv2.COLOR_GRAY2BGR);
 
         #draw lines on image to show cropped section used for detection
-        #cv2.rectangle(imgL, (304,0),(720, 543), (0, 200, 0),lineThickness) #draw it on image
-        #cv2.rectangle(dis, (304,0),(720, 543), (0, 200, 0),lineThickness) #draw it on the disparity image
+        cv2.rectangle(imgL, (304,0),(720, 543), (0, 200, 0),lineThickness) #draw it on image
+        cv2.rectangle(dis, (304,0),(720, 543), (0, 200, 0),lineThickness) #draw it on the disparity image
 
 
        
@@ -234,7 +225,7 @@ for filename_left in left_file_list:
         #minDis.append(min(distances))
         avgDis.append(sum(filter(lambda x: isinstance(x,float),distances)))
         objects.append(len(boxes))
-        # display image
+        # display images horizontally stacked for video generation 
         
         combined = np.hstack((imgL,dis))
         cv2.imshow(windowName,combined)
@@ -242,28 +233,28 @@ for filename_left in left_file_list:
 
         cv2.setWindowProperty(windowName, cv2.WND_PROP_FULLSCREEN,
                                 cv2.WINDOW_FULLSCREEN )
-        #cv2.imshow("Disparity",disparity_scaled)
         
 
         #function for wait save and exit keys, important for images to show
 
         key = cv2.waitKey(40 * (not(pause_playback))) & 0xFF; # wait 40ms (i.e. 1000ms / 25 fps = 40 ms)
-        if (key == ord('x')) or count==100:
-            data = {
+        if (key == ord('x')) or count==99:
+            
+            data = { #to record the data for testing purposes 
                 "time":time,
                 "minDis":minDis,
                 "avgDis":avgDis,
                 "objects":objects
             }
             df = pd.DataFrame(data)
-            df.to_csv("150Smooth1.csv")
+            df.to_csv("new.csv")
             break; # exit
         elif (key == ord('s')):     # save
-            #cv2.imwrite("sgbm-disparty.png", disparity_scaled);
+            cv2.imwrite("sgbm-disparty.png", dis);
             cv2.imwrite("left.png", imgL);
         elif (key == ord(' ')):     # pause (on next frame)
             pause_playback = not(pause_playback);
     else:
             print("-- files skipped (perhaps one is missing or not PNG)");
             print();
-    count +=1
+    count +=1 #to stop playback of images for testing purposes
