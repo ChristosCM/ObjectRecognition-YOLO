@@ -1,13 +1,16 @@
 import pandas as pd 
 import numpy as np
 
-data = pd.read_csv("150Smooth1.csv")
+data = pd.read_csv("new.csv")
 
+print (data.minDis.value_counts())
+data = data.replace(np.inf,0.0)
 
-dis = data['minDis'].replace({"inf":0.0})
-print (dis)
-dis = dis.replace(0.0,np.nan)
-print (dis.value_counts())
+tm = data.time.sum(axis=0,skipna=True)
+print ("Avg Time:{}".format(tm/100))
 
-dis = dis.sum(axis=0,skipna=True)
-print (dis/100)
+avgmin = data.minDis.sum(axis=0,skipna=True)
+print ("Avg Min: {}".format(avgmin/100))
+
+obj = data.objects.sum(axis=0,skipna=True)
+print ("No of objects: {}".format(obj))
